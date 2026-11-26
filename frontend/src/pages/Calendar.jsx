@@ -1,5 +1,11 @@
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  CalendarDays,
+  ListChecks,
+} from "lucide-react";
 import useTasks from "../hooks/useTasks";
 import TaskModal from "../components/TaskModal";
 import {
@@ -12,12 +18,13 @@ import {
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export default function Calendar() {
-  const { tasks, addTask, editTask, toggleTask } = useTasks({});
+  const { tasks, addTask, toggleTask } = useTasks({});
   const [cursor, setCursor] = useState(new Date());
   const [view, setView] = useState("month");
   const [selected, setSelected] = useState(toISODate(new Date()));
   const [modalOpen, setModalOpen] = useState(false);
 
+  /* ---------- Group tasks by due date ---------- */
   const byDate = useMemo(() => {
     const map = {};
     tasks.forEach((t) => {
@@ -28,6 +35,7 @@ export default function Calendar() {
     return map;
   }, [tasks]);
 
+  /* ---------- Month grid (with leading blanks) ---------- */
   const monthCells = useMemo(() => {
     const y = cursor.getFullYear();
     const m = cursor.getMonth();
@@ -38,6 +46,7 @@ export default function Calendar() {
     return cells;
   }, [cursor]);
 
+  /* ---------- Week grid (Sun → Sat of cursor's week) ---------- */
   const weekDays = useMemo(() => {
     const start = new Date(cursor);
     start.setDate(start.getDate() - start.getDay());
@@ -48,6 +57,7 @@ export default function Calendar() {
     });
   }, [cursor]);
 
+  /* ---------- Navigation ---------- */
   const shift = (dir) => {
     const d = new Date(cursor);
     if (view === "month") d.setMonth(d.getMonth() + dir);
@@ -55,55 +65,105 @@ export default function Calendar() {
     setCursor(d);
   };
 
+  const goToday = () => {
+    const now = new Date();
+    setCursor(now);
+    setSelected(toISODate(now));
+  };
+
+  /* ---------- Determine highest-priority unfinished task ---------- */
+  const topPriorityOf = (dayTasks) => {
+    if (dayTasks.some((t) => !t.completed && t.priority === "High"))
+      return "High";
+    if (dayTasks.some((t) => !t.completed && t.priority === "Medium"))
+      return "Medium";
+    if (dayTasks.some((t) => !t.completed && t.priority === "Low"))
+      return "Low";
+    return null;
+  };
+
+  /* ---------- Cell tint by priority ---------- */
+  const tintFor = (priority) => {
+    if (priority === "High") return "bg-red-50/70 dark:bg-red-500/[0.06]";
+    if (priority === "Medium")
+      return "bg-orange-50/70 dark:bg-orange-500/[0.06]";
+    if (priority === "Low") return "bg-green-50/70 dark:bg-green-500/[0.06]";
+    return "bg-card";
+  };
+
+  /* ---------- Pill style per priority ---------- */
+  const pillStyle = (priority) => {
+    if (priority === "High")
+      return "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-400";
+    if (priority === "Medium")
+      return "bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-400";
+    return "bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-400";
+  };
+
+  /* ---------- A single day cell ---------- */
   const DayCell = ({ date, tall = false }) => {
+    // Placeholder must be same height as real cell → keeps rows aligned
     if (!date)
-      return <div className="min-h-[76px] rounded-xl bg-transparent" />;
+      return <div className={`${tall ? "min-h-[200px]" : "min-h-[96px]"}`} />;
+
     const iso = toISODate(date);
     const dayTasks = byDate[iso] || [];
     const isToday = iso === toISODate(new Date());
     const isSelected = iso === selected;
+    const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+    const topPriority = topPriorityOf(dayTasks);
+    const maxPills = tall ? 4 : 2;
 
     return (
       <button
         onClick={() => setSelected(iso)}
-        className={`min-h-[76px] rounded-xl border p-2 text-left transition
-        ${
-          isToday
-            ? "border-primary bg-primary text-white shadow-lg shadow-primary/30 hover:bg-primary/90"
-            : isSelected
-              ? "border-primary bg-primary/5"
-              : "border-line bg-card hover:border-primary/50 hover:bg-primary/5"
-        }
-        ${tall ? "min-h-[120px]" : ""}`}
+        className={`group relative flex flex-col rounded-lg border p-2 text-left transition-all
+          ${
+            isSelected
+              ? "border-primary bg-primary/5 ring-2 ring-primary/20"
+              : `border-line ${tintFor(topPriority)} hover:border-primary/40 hover:shadow-sm`
+          }
+          ${tall ? "min-h-[200px]" : "min-h-[96px]"}`}
       >
         <span
-          className={`inline-grid h-6 w-6 place-items-center rounded-full text-xs font-bold
-          ${isToday ? "bg-white text-primary" : "text-txt"}`}
+          className={`inline-grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-semibold
+            ${
+              isToday
+                ? "bg-primary text-white shadow-sm"
+                : isWeekend
+                  ? "text-red-500"
+                  : "text-txt group-hover:text-primary"
+            }`}
         >
           {date.getDate()}
         </span>
-        <div className="mt-1 flex flex-wrap gap-1">
-          {dayTasks.slice(0, 3).map((t) => (
-            <span
+
+        <div className="mt-1 w-full space-y-0.5 overflow-hidden">
+          {dayTasks.slice(0, maxPills).map((t) => (
+            <div
               key={t.id}
-              className={`h-1.5 w-1.5 rounded-full ${isToday ? "bg-white/80" : priorityDot[t.priority]}`}
-            />
-          ))}
-          {dayTasks.length > 3 && (
-            <span
-              className={`text-[10px] ${isToday ? "text-white/80" : "text-muted"}`}
+              className={`truncate rounded px-1 py-0.5 text-[10px] font-medium leading-tight
+                ${t.completed ? "bg-bg text-muted line-through" : pillStyle(t.priority)}`}
             >
-              +{dayTasks.length - 3}
+              {t.title}
+            </div>
+          ))}
+          {dayTasks.length > maxPills && (
+            <span className="block pl-1 text-[10px] font-semibold text-muted">
+              +{dayTasks.length - maxPills} more
             </span>
           )}
         </div>
       </button>
     );
   };
+
   const selectedTasks = byDate[selected] || [];
+  const selectedDateObj = new Date(`${selected}T00:00:00`);
 
   return (
     <div className="space-y-5">
+      {/* ---------- Header ---------- */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight">Calendar</h1>
@@ -116,6 +176,14 @@ export default function Calendar() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={goToday}
+            className="btn-ghost !px-3 text-xs"
+            title="Jump to today"
+          >
+            Today
+          </button>
+
           <div className="flex rounded-xl border border-line bg-card p-1">
             {["month", "week"].map((v) => (
               <button
@@ -131,6 +199,7 @@ export default function Calendar() {
               </button>
             ))}
           </div>
+
           <button
             className="btn-ghost !px-2.5"
             onClick={() => shift(-1)}
@@ -151,14 +220,20 @@ export default function Calendar() {
         </div>
       </div>
 
+      {/* ---------- Calendar + side panel ---------- */}
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="card p-4 lg:col-span-2">
-          <div className="mb-2 grid grid-cols-7 gap-1.5 text-center text-xs font-semibold text-muted">
-            {WEEKDAYS.map((d) => (
-              <div key={d}>{d}</div>
+          {/* Weekday header */}
+          <div className="mb-2 grid grid-cols-7 gap-2 text-center text-[11px] font-bold uppercase tracking-wider text-muted">
+            {WEEKDAYS.map((d, i) => (
+              <div key={d} className={i === 0 || i === 6 ? "text-red-500" : ""}>
+                {d}
+              </div>
             ))}
           </div>
-          <div className="grid grid-cols-7 gap-1.5">
+
+          {/* Cells */}
+          <div className="grid grid-cols-7 gap-2">
             {view === "month"
               ? monthCells.map((d, i) => <DayCell key={i} date={d} />)
               : weekDays.map((d) => (
@@ -167,27 +242,65 @@ export default function Calendar() {
           </div>
         </div>
 
-        <div className="card p-4">
-          <h2 className="text-sm font-bold">{formatDate(selected)}</h2>
-          <div className="mt-3 space-y-2">
+        {/* Side panel — tasks for selected day */}
+        <div className="card flex flex-col p-4">
+          <div className="flex items-center gap-2 border-b border-line pb-3">
+            <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary/10 text-primary">
+              <CalendarDays size={17} />
+            </span>
+            <div>
+              <p className="text-xs text-muted">Selected day</p>
+              <h2 className="text-sm font-bold">{formatDate(selected)}</h2>
+            </div>
+          </div>
+
+          <div className="mt-3 flex-1 space-y-2 overflow-y-auto">
             {selectedTasks.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted">
-                No tasks on this date
-              </p>
+              <div className="flex flex-col items-center gap-2 py-12 text-center text-muted">
+                <ListChecks size={26} />
+                <p className="text-sm">No tasks on this date</p>
+                <button
+                  onClick={() => setModalOpen(true)}
+                  className="text-xs font-semibold text-primary hover:underline"
+                >
+                  + Add one
+                </button>
+              </div>
             ) : (
               selectedTasks.map((t) => (
-                <div key={t.id} className="rounded-xl border border-line p-3">
+                <div
+                  key={t.id}
+                  className={`rounded-xl border border-line border-l-4 p-3 transition hover:bg-bg
+                    ${
+                      t.priority === "High"
+                        ? "border-l-red-500"
+                        : t.priority === "Medium"
+                          ? "border-l-orange-500"
+                          : "border-l-green-500"
+                    }`}
+                >
                   <div className="flex items-start justify-between gap-2">
                     <p
-                      className={`text-sm font-semibold ${t.completed ? "line-through text-muted" : ""}`}
+                      className={`text-sm font-semibold leading-snug ${
+                        t.completed ? "line-through text-muted" : ""
+                      }`}
                     >
                       {t.title}
                     </p>
-                    <span className={`badge ${priorityStyles[t.priority]}`}>
+                    <span
+                      className={`badge shrink-0 ${priorityStyles[t.priority]}`}
+                    >
                       {t.priority}
                     </span>
                   </div>
-                  <div className="mt-2 flex items-center gap-2">
+
+                  {t.description && (
+                    <p className="mt-1 line-clamp-2 text-xs text-muted">
+                      {t.description}
+                    </p>
+                  )}
+
+                  <div className="mt-2 flex items-center justify-between">
                     <span className="badge bg-secondary/10 text-secondary">
                       {t.category}
                     </span>
@@ -202,9 +315,28 @@ export default function Calendar() {
               ))
             )}
           </div>
+
+          {/* Legend */}
+          <div className="mt-3 border-t border-line pt-3">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
+              Priority
+            </p>
+            <div className="flex flex-wrap gap-3 text-[11px] text-muted">
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-red-500" /> High
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-orange-500" /> Medium
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-green-500" /> Low
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
+      {/* Add task modal — pre-fills selected date */}
       <TaskModal
         open={modalOpen}
         defaultDate={selected}
