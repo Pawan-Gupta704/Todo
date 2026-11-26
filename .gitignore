@@ -1,0 +1,10 @@
+<CodeBlock language="gitignore" editable>
+node_modules/
+.env
+.env.*
+!.env.example
+dist/
+build/
+coverage/
+.DS_Store
+</CodeBlock>
