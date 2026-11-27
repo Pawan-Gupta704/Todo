@@ -219,6 +219,7 @@ export default function Calendar() {
           </button>
         </div>
       </div>
+      <p>Hello I am ok</p>
 
       {/* ---------- Calendar + side panel ---------- */}
       <div className="grid gap-4 lg:grid-cols-3">
